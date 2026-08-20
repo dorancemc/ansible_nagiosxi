@@ -1,0 +1,129 @@
+---
+- name: Validate role parameters
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] in nagiosxi_supported_distributions
+      - nagiosxi_src_url | length > 0
+      - nagiosxi_staging_dir | length > 0
+    fail_msg: "The Nagios XI installer only supports {{ nagiosxi_supported_distributions | join(', ') }} and this host runs {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}."
+
+- name: Check nagios xi installation
+  become: true
+  ansible.builtin.stat:
+    path: /usr/local/nagiosxi
+  register: __nagiosxi_home
+
+- name: Install nagios xi
+  when: not __nagiosxi_home.stat.exists
+  block:
+    - name: Update every package before installing
+      become: true
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+      register: __nagiosxi_update_redhat
+      when:
+        - nagiosxi_update_packages | bool
+        - ansible_facts['os_family'] == 'RedHat'
+
+    - name: Update every package before installing
+      become: true
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: true
+      register: __nagiosxi_update_debian
+      when:
+        - nagiosxi_update_packages | bool
+        - ansible_facts['os_family'] == 'Debian'
+
+    - name: Reboot into the updated packages
+      become: true
+      ansible.builtin.reboot:
+        reboot_timeout: "{{ nagiosxi_reboot_timeout }}"
+      when:
+        - nagiosxi_reboot_after_update | bool
+        - (__nagiosxi_update_redhat.changed | default(false)) or (__nagiosxi_update_debian.changed | default(false))
+
+    - name: Assert the ssh daemon survived the update
+      become: true
+      ansible.builtin.command:
+        cmd: systemctl is-active {{ nagiosxi_ssh_services[ansible_facts['os_family']] }}
+      register: __nagiosxi_sshd
+      changed_when: false
+      failed_when: __nagiosxi_sshd.stdout | trim != 'active'
+
+    - name: Create staging directory
+      become: true
+      ansible.builtin.file:
+        path: "{{ nagiosxi_staging_dir }}"
+        state: directory
+        mode: "0750"
+
+    - name: Download nagios xi installer
+      become: true
+      ansible.builtin.get_url:
+        url: "{{ nagiosxi_src_url }}"
+        dest: "{{ nagiosxi_staging_dir }}/nagiosxi.tar.gz"
+        mode: "0640"
+
+    - name: Extract nagios xi installer
+      become: true
+      ansible.builtin.unarchive:
+        src: "{{ nagiosxi_staging_dir }}/nagiosxi.tar.gz"
+        dest: "{{ nagiosxi_staging_dir }}"
+        remote_src: true
+
+    - name: Report where the installer writes its log
+      ansible.builtin.debug:
+        msg: "Installing Nagios XI, this takes 15 to 30 minutes. Follow it with: tail -f {{ nagiosxi_staging_dir }}/nagiosxi/install.log"
+
+    - name: Run nagios xi installer
+      become: true
+      ansible.builtin.command:
+        cmd: ./fullinstall -n
+        chdir: "{{ nagiosxi_staging_dir }}/nagiosxi"
+        creates: /usr/local/nagiosxi
+      register: __nagiosxi_fullinstall
+      changed_when: __nagiosxi_fullinstall.rc == 0
+      failed_when: __nagiosxi_fullinstall.rc != 0
+
+    - name: Assert the ssh daemon survived the installer
+      become: true
+      ansible.builtin.command:
+        cmd: systemctl is-active {{ nagiosxi_ssh_services[ansible_facts['os_family']] }}
+      register: __nagiosxi_sshd_after
+      changed_when: false
+      failed_when: __nagiosxi_sshd_after.stdout | trim != 'active'
+
+    - name: Generate the initial nagios configuration
+      become: true
+      ansible.builtin.command:
+        cmd: /usr/local/nagiosxi/scripts/reconfigure_nagios.sh
+      register: __nagiosxi_reconfigure
+      changed_when: __nagiosxi_reconfigure.rc == 0
+      failed_when: __nagiosxi_reconfigure.rc != 0
+
+  always:
+    - name: Keep the installer log
+      become: true
+      ansible.builtin.copy:
+        src: "{{ nagiosxi_staging_dir }}/nagiosxi/install.log"
+        dest: "{{ nagiosxi_log_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0640"
+      failed_when: false
+      changed_when: false
+
+    - name: Report where the installer log was kept
+      ansible.builtin.debug:
+        msg: "Nagios XI installer log: {{ nagiosxi_log_path }}"
+
+    - name: Remove staging directory
+      become: true
+      ansible.builtin.file:
+        path: "{{ nagiosxi_staging_dir }}"
+        state: absent
+      changed_when: false

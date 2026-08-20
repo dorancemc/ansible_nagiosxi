@@ -1,0 +1,12 @@
+---
+- name: Install nagios xi
+  ansible.builtin.import_tasks: install.yml
+  tags:
+    - nagiosxi
+    - nagiosxi-install
+
+- name: Configure nagios xi services
+  ansible.builtin.import_tasks: config.yml
+  tags:
+    - nagiosxi
+    - nagiosxi-config

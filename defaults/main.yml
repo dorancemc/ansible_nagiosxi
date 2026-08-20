@@ -1,0 +1,20 @@
+---
+nagiosxi_apache_services:
+  Debian: apache2
+  RedHat: httpd
+nagiosxi_log_path: /var/log/nagiosxi-install.log
+nagiosxi_reboot_after_update: true
+nagiosxi_reboot_timeout: 600
+nagiosxi_ssh_services:
+  Debian: ssh
+  RedHat: sshd
+nagiosxi_src_url: https://assets.nagios.com/downloads/nagiosxi/2026/xi-2026R1.7.tar.gz
+nagiosxi_staging_dir: /tmp/nagiosxi-install
+nagiosxi_supported_distributions:
+  - CentOS
+  - Debian
+  - OracleLinux
+  - RedHat
+  - Ubuntu
+nagiosxi_update_packages: true
+nagiosxi_url: "https://{{ inventory_hostname }}/nagiosxi/"

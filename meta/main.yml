@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  author: Dorance Martinez
+  company: DMCi.co
+  description: Install Nagios XI on RHEL family hosts using the official installer.
+  role_name: ansible_nagiosxi
+  license: Apache-2.0
+  min_ansible_version: "2.20"
+  platforms: []
+  galaxy_tags:
+    - nagiosxi
+
+dependencies: []

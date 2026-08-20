@@ -1,0 +1,26 @@
+---
+- name: Ensure nagios xi services are started and enabled
+  become: true
+  ansible.builtin.service:
+    name: "{{ __nagiosxi_service }}"
+    state: started
+    enabled: true
+  loop:
+    - "{{ nagiosxi_apache_services[ansible_facts['os_family']] }}"
+    - nagios
+  loop_control:
+    loop_var: __nagiosxi_service
+
+- name: Wait for nagios xi web interface
+  ansible.builtin.wait_for:
+    port: 80
+    timeout: 120
+
+- name: Set the nagios xi program url
+  become: true
+  ansible.builtin.script:
+    cmd: set_program_url.php "{{ nagiosxi_url }}"
+    executable: /usr/bin/php
+  register: __nagiosxi_program_url
+  changed_when: __nagiosxi_program_url.stdout is search('^CHANGED')
+  failed_when: __nagiosxi_program_url.rc != 0
