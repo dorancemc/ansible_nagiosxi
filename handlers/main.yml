@@ -1,0 +1,6 @@
+---
+- name: Reload nagiosxi web server
+  become: true
+  ansible.builtin.service:
+    name: "{{ nagiosxi_apache_services[ansible_facts['os_family']] }}"
+    state: reloaded

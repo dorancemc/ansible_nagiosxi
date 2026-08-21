@@ -14,7 +14,7 @@
   register: __nagiosxi_home
 
 - name: Install nagios xi
-  when: not __nagiosxi_home.stat.exists
+  when: not __nagiosxi_home.stat.exists or nagiosxi_force_install | bool
   block:
     - name: Update every package before installing
       become: true
@@ -22,20 +22,8 @@
         name: "*"
         state: latest
         update_cache: true
-      register: __nagiosxi_update_redhat
-      when:
-        - nagiosxi_update_packages | bool
-        - ansible_facts['os_family'] == 'RedHat'
-
-    - name: Update every package before installing
-      become: true
-      ansible.builtin.apt:
-        upgrade: dist
-        update_cache: true
-      register: __nagiosxi_update_debian
-      when:
-        - nagiosxi_update_packages | bool
-        - ansible_facts['os_family'] == 'Debian'
+      register: __nagiosxi_update
+      when: nagiosxi_update_packages | bool
 
     - name: Reboot into the updated packages
       become: true
@@ -43,7 +31,7 @@
         reboot_timeout: "{{ nagiosxi_reboot_timeout }}"
       when:
         - nagiosxi_reboot_after_update | bool
-        - (__nagiosxi_update_redhat.changed | default(false)) or (__nagiosxi_update_debian.changed | default(false))
+        - __nagiosxi_update.changed | default(false)
 
     - name: Assert the ssh daemon survived the update
       become: true
@@ -81,9 +69,8 @@
     - name: Run nagios xi installer
       become: true
       ansible.builtin.command:
-        cmd: ./fullinstall -n
+        cmd: "./fullinstall -n{{ ' -f' if nagiosxi_force_install | bool else '' }}"
         chdir: "{{ nagiosxi_staging_dir }}/nagiosxi"
-        creates: /usr/local/nagiosxi
       register: __nagiosxi_fullinstall
       changed_when: __nagiosxi_fullinstall.rc == 0
       failed_when: __nagiosxi_fullinstall.rc != 0
@@ -103,6 +90,23 @@
       register: __nagiosxi_reconfigure
       changed_when: __nagiosxi_reconfigure.rc == 0
       failed_when: __nagiosxi_reconfigure.rc != 0
+
+    # El wizard de activacion corre en el navegador y XI construye sus
+    # redirects absolutos desde esta opcion: sin corregirla, fullinstall -n
+    # deja http://localhost/nagiosxi/ y el wizard es inusable desde fuera.
+    # Tiene que quedar lista antes de que el role corte el play.
+    - name: Set the nagios xi program url
+      become: true
+      ansible.builtin.script:
+        cmd: set_program_url.php "{{ nagiosxi_url }}"
+        executable: /usr/bin/php
+      register: __nagiosxi_program_url
+      changed_when: __nagiosxi_program_url.stdout is search('^CHANGED')
+      failed_when: __nagiosxi_program_url.rc != 0
+
+    - name: Record that this run installed Nagios XI
+      ansible.builtin.set_fact:
+        __nagiosxi_installed_now: true
 
   always:
     - name: Keep the installer log

@@ -1,4 +1,19 @@
 ---
+- name: Redirect root URL to nagiosxi
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/httpd/conf.d/nagiosxi.conf
+    line: "RedirectMatch ^/$ /nagiosxi/"
+    regexp: '^RedirectMatch \^/\$'
+    insertbefore: BOF
+  notify: Reload nagiosxi web server
+
+- name: Generate nagios xi configuration from CCM
+  become: true
+  ansible.builtin.command:
+    cmd: /usr/local/nagiosxi/scripts/reconfigure_nagios.sh
+  changed_when: false
+
 - name: Ensure nagios xi services are started and enabled
   become: true
   ansible.builtin.service:
@@ -15,12 +30,3 @@
   ansible.builtin.wait_for:
     port: 80
     timeout: 120
-
-- name: Set the nagios xi program url
-  become: true
-  ansible.builtin.script:
-    cmd: set_program_url.php "{{ nagiosxi_url }}"
-    executable: /usr/bin/php
-  register: __nagiosxi_program_url
-  changed_when: __nagiosxi_program_url.stdout is search('^CHANGED')
-  failed_when: __nagiosxi_program_url.rc != 0

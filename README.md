@@ -33,6 +33,79 @@ the role against an existing installation upgrades nothing.
 | `nagiosxi_reboot_after_update` | `true` | Reboot when that update changed something |
 | `nagiosxi_reboot_timeout` | `600` | Seconds to wait for the host to come back |
 | `nagiosxi_url` | `https://{{ inventory_hostname }}/nagiosxi/` | Program URL the web interface builds its redirects from |
+| `nagiosxi_verify_wizard` | `true` | Refuse to configure a host whose setup wizard is still pending |
+
+## The Setup Wizard Splits The Deploy In Two
+
+`fullinstall` leaves the product installed but not activated. The rest of the
+setup — license key and administrator account — happens in the browser, and
+when that wizard finishes it rewrites `ssl.conf` with the self-signed
+certificate Nagios XI ships. Any certificate deployed before that point is
+gone, which is exactly what happens when Certbot runs in the same pass as the
+installer.
+
+So the role never runs the installer and the configuration in one go:
+
+1. **First run** — Nagios XI is not installed. The role installs it, prints the
+   URL of the wizard and ends the play for that host with `meta: end_host`.
+   Nothing downstream of the role runs, so no certificate is issued yet.
+2. **You complete the wizard** in the browser.
+3. **Second run, same tags** — the role finds Nagios XI installed, asks the
+   database whether the wizard was completed and only then continues. If it is
+   still pending the run fails with a clear message instead of burning a
+   certificate.
+
+`files/check_setup_complete.php` answers that question. The web interface
+cannot: an installation still sitting on its wizard already redirects
+`/nagiosxi/` to `login.php`, and `install.php` is compiled with SourceGuardian.
+Two rows in `xi_options` do tell the two states apart, and neither exists on a
+freshly installed host:
+
+| Row | Written by |
+|---|---|
+| `install_version` | the web installer, when it finishes |
+| `enterprise_key` or `trial_key` | the activation step |
+
+The script reads the database credentials from the installation itself, the
+same way `set_program_url.php` does, and exits `0` when the wizard is done and
+`3` when it is not.
+
+## SSL Is Handled By Nagios XI's Own Script
+
+Nagios XI owns `ssl.conf`: its **Admin > SSL Config** screen — and the
+activation wizard behind it — call `manage_ssl_config.sh` and rewrite
+`SSLCertificateFile` and `SSLCertificateKeyFile`. Editing that file with
+`lineinfile` puts Ansible and Nagios XI in a fight over the same resource, and
+whatever Certbot deployed disappears the moment somebody walks through that
+screen.
+
+`tasks/ssl.yml` calls the same script Nagios XI calls, and points Apache
+straight at `/etc/letsencrypt/live/`. There are no copies under
+`/usr/local/nagiosxi/var/certs/` to drift out of sync — that directory is
+empty in 2026R1 anyway — and the renewal only has to reload `httpd`.
+
+Because Apache cannot be pointed at a certificate that does not exist yet,
+these tasks are **not** part of `tasks/main.yml`. Run them after whatever
+issues the certificate:
+
+```yaml
+- hosts: nagiosxi
+  roles:
+    - role: nagiosxi
+    - role: certbot
+  post_tasks:
+    - name: Point Apache at the Let's Encrypt certificate
+      ansible.builtin.include_role:
+        name: nagiosxi
+        tasks_from: ssl
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `nagiosxi_ssl_cert` | `""` | Certificate Apache should serve. Empty disables the whole step |
+| `nagiosxi_ssl_key` | `""` | Its private key |
+| `nagiosxi_ssl_conf` | `/etc/httpd/conf.d/ssl.conf` | File read to decide whether the change is already applied |
+| `nagiosxi_ssl_script` | `/usr/local/nagiosxi/scripts/manage_ssl_config.sh` | The Nagios XI SSL manager |
 
 `nagiosxi_url` matters more than it looks: `fullinstall -n` runs unattended and
 stores `http://localhost/nagiosxi/`, so every browser that reaches the server

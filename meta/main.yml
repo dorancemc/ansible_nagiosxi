@@ -6,7 +6,11 @@ galaxy_info:
   role_name: ansible_nagiosxi
   license: Apache-2.0
   min_ansible_version: "2.20"
-  platforms: []
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+        - "9"
   galaxy_tags:
     - nagiosxi
 

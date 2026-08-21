@@ -1,0 +1,55 @@
+---
+# El wizard de activación de Nagios XI corre en el navegador, no en el
+# instalador: pide la licencia y crea la cuenta de administrador, y al
+# terminar reescribe ssl.conf apuntando al certificado autofirmado del
+# producto. Todo certificado desplegado antes de ese momento se pierde.
+#
+# Por eso el role corta el play justo después de instalar y obliga a una
+# segunda ejecución: en esa segunda pasada verifica que el wizard quedó
+# completo y solo entonces deja seguir a certbot y al resto del despliegue.
+
+- name: Report that the setup wizard is pending
+  ansible.builtin.debug:
+    msg:
+      - "Nagios XI no estaba instalado en {{ inventory_hostname }} y se acaba de instalar."
+      - "Completa el wizard de activacion en {{ nagiosxi_url }} (licencia y cuenta de administrador)."
+      - "Cuando termine, vuelve a ejecutar el job con los mismos tags: el role verificara la"
+      - "instalacion y continuara con certbot y la configuracion de Nagios."
+  when: __nagiosxi_installed_now | default(false)
+
+- name: End the play for this host until the setup wizard is completed
+  ansible.builtin.meta: end_host
+  when: __nagiosxi_installed_now | default(false)
+
+- name: Look for an existing Nagios XI installation
+  become: true
+  ansible.builtin.stat:
+    path: /usr/local/nagiosxi
+  register: __nagiosxi_wizard_home
+
+- name: Verify the setup wizard was completed
+  when:
+    - nagiosxi_verify_wizard | bool
+    - __nagiosxi_wizard_home.stat.exists
+  block:
+    - name: Ask the Nagios XI database whether the setup wizard was completed
+      become: true
+      ansible.builtin.script:
+        cmd: check_setup_complete.php
+        executable: /usr/bin/php
+      register: __nagiosxi_wizard_check
+      changed_when: false
+      failed_when: __nagiosxi_wizard_check.rc not in [0, 3]
+
+    - name: Report the state of the setup wizard
+      ansible.builtin.debug:
+        msg: "{{ __nagiosxi_wizard_check.stdout | trim }}"
+
+    - name: Fail when the setup wizard has not been completed yet
+      ansible.builtin.fail:
+        msg:
+          - "El wizard de activacion de Nagios XI sigue pendiente en {{ inventory_hostname }}."
+          - "{{ __nagiosxi_wizard_check.stdout | trim }}"
+          - "Completalo en {{ nagiosxi_url }} y vuelve a ejecutar el job."
+          - "Seguir ahora dejaria el certificado de Let's Encrypt sobrescrito por el autofirmado."
+      when: __nagiosxi_wizard_check.rc == 3

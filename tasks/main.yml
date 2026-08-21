@@ -5,6 +5,13 @@
     - nagiosxi
     - nagiosxi-install
 
+- name: Check the nagios xi setup wizard
+  ansible.builtin.import_tasks: wizard.yml
+  tags:
+    - nagiosxi
+    - nagiosxi-install
+    - nagiosxi-config
+
 - name: Configure nagios xi services
   ansible.builtin.import_tasks: config.yml
   tags:
