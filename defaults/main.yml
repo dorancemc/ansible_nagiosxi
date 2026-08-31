@@ -7,6 +7,11 @@ nagiosxi_reboot_after_update: true
 nagiosxi_reboot_timeout: 600
 nagiosxi_ssh_services:
   RedHat: sshd
+# Apache points straight at /etc/letsencrypt/live/ through the official Nagios XI
+# script (tasks/ssl.yml): no copies under /usr/local/nagiosxi that drift out of
+# sync, and no lineinfile over an ssl.conf that XI rewrites on its own. That is why
+# no deploy files or copy hooks are needed here; the renewal deploy hook reloads
+# httpd and that is enough.
 nagiosxi_ssl_cert: ""
 nagiosxi_ssl_conf: /etc/httpd/conf.d/ssl.conf
 nagiosxi_ssl_key: ""
