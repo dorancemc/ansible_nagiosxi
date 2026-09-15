@@ -1,20 +1,28 @@
 ---
+nagiosxi_force_install: false
 nagiosxi_apache_services:
-  Debian: apache2
   RedHat: httpd
 nagiosxi_log_path: /var/log/nagiosxi-install.log
 nagiosxi_reboot_after_update: true
 nagiosxi_reboot_timeout: 600
 nagiosxi_ssh_services:
-  Debian: ssh
   RedHat: sshd
+# Certificate Apache should serve. Empty disables the SSL step entirely.
+nagiosxi_ssl_cert: ""
+# ssl.conf file read to decide whether the certificate change is already applied.
+nagiosxi_ssl_conf: /etc/httpd/conf.d/ssl.conf
+# Private key paired with nagiosxi_ssl_cert.
+nagiosxi_ssl_key: ""
+# Official Nagios XI SSL manager that owns ssl.conf.
+nagiosxi_ssl_script: /usr/local/nagiosxi/scripts/manage_ssl_config.sh
 nagiosxi_src_url: https://assets.nagios.com/downloads/nagiosxi/2026/xi-2026R1.7.tar.gz
 nagiosxi_staging_dir: /tmp/nagiosxi-install
 nagiosxi_supported_distributions:
+  - AlmaLinux
   - CentOS
-  - Debian
   - OracleLinux
   - RedHat
-  - Ubuntu
+  - Rocky
 nagiosxi_update_packages: true
 nagiosxi_url: "https://{{ inventory_hostname }}/nagiosxi/"
+nagiosxi_verify_wizard: true

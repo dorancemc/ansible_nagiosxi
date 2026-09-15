@@ -1,0 +1,46 @@
+---
+- name: Report that the setup wizard is pending
+  ansible.builtin.debug:
+    msg:
+      - "Nagios XI was not installed on {{ inventory_hostname }} and has just been installed."
+      - "Complete the activation wizard at {{ nagiosxi_url }} (license and administrator account)."
+      - "When done, re-run the job with the same tags: the role will verify the"
+      - "installation and continue with certbot and the Nagios configuration."
+  when: __nagiosxi_installed_now | default(false)
+
+- name: End the play for this host until the setup wizard is completed
+  ansible.builtin.meta: end_host
+  when: __nagiosxi_installed_now | default(false)
+
+- name: Look for an existing Nagios XI installation
+  become: true
+  ansible.builtin.stat:
+    path: /usr/local/nagiosxi
+  register: __nagiosxi_wizard_home
+
+- name: Verify the setup wizard was completed
+  when:
+    - nagiosxi_verify_wizard | bool
+    - __nagiosxi_wizard_home.stat.exists
+  block:
+    - name: Ask the Nagios XI database whether the setup wizard was completed
+      become: true
+      ansible.builtin.script:
+        cmd: check_setup_complete.php
+        executable: /usr/bin/php
+      register: __nagiosxi_wizard_check
+      changed_when: false
+      failed_when: __nagiosxi_wizard_check.rc not in [0, 3]
+
+    - name: Report the state of the setup wizard
+      ansible.builtin.debug:
+        msg: "{{ __nagiosxi_wizard_check.stdout | trim }}"
+
+    - name: Fail when the setup wizard has not been completed yet
+      ansible.builtin.fail:
+        msg:
+          - "The Nagios XI activation wizard is still pending on {{ inventory_hostname }}."
+          - "{{ __nagiosxi_wizard_check.stdout | trim }}"
+          - "Complete it at {{ nagiosxi_url }} and re-run the job."
+          - "Continuing now would leave the Let's Encrypt certificate overwritten by the self-signed one."
+      when: __nagiosxi_wizard_check.rc == 3

@@ -1,0 +1,42 @@
+---
+- name: Configure the Nagios XI SSL certificate
+  when:
+    - nagiosxi_ssl_cert | length > 0
+    - nagiosxi_ssl_key | length > 0
+  block:
+    - name: Check the certificate and key are present
+      become: true
+      ansible.builtin.stat:
+        path: "{{ __nagiosxi_ssl_file }}"
+      register: __nagiosxi_ssl_files
+      loop:
+        - "{{ nagiosxi_ssl_cert }}"
+        - "{{ nagiosxi_ssl_key }}"
+      loop_control:
+        loop_var: __nagiosxi_ssl_file
+
+    - name: Fail when the certificate or the key is missing
+      ansible.builtin.fail:
+        msg: >-
+          Cannot configure SSL on {{ inventory_hostname }}:
+          missing {{ __nagiosxi_ssl_files.results | rejectattr('stat.exists')
+                    | map(attribute='__nagiosxi_ssl_file') | join(', ') }}.
+      when: __nagiosxi_ssl_files.results | rejectattr('stat.exists') | list | length > 0
+
+    - name: Read the certificate Apache is currently configured with
+      become: true
+      ansible.builtin.command:
+        cmd: >-
+          awk '/^[[:space:]]*SSLCertificateFile[[:space:]]/ {cert=$2}
+               /^[[:space:]]*SSLCertificateKeyFile[[:space:]]/ {key=$2}
+               END {print cert; print key}' {{ nagiosxi_ssl_conf }}
+      register: __nagiosxi_ssl_current
+      changed_when: false
+
+    - name: Point Apache at the certificate with the Nagios XI SSL manager
+      become: true
+      ansible.builtin.command:
+        cmd: "{{ nagiosxi_ssl_script }} --cert {{ nagiosxi_ssl_cert }} --key {{ nagiosxi_ssl_key }}"
+      register: __nagiosxi_ssl_apply
+      changed_when: __nagiosxi_ssl_apply.rc == 0
+      when: __nagiosxi_ssl_current.stdout_lines != [nagiosxi_ssl_cert, nagiosxi_ssl_key]
