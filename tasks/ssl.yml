@@ -1,16 +1,4 @@
 ---
-# Nagios XI gestiona su propio ssl.conf: la pantalla Admin > SSL Config llama a
-# manage_ssl_config.sh y reescribe SSLCertificateFile y SSLCertificateKeyFile.
-# Editar ese archivo con lineinfile deja a Ansible y a XI peleando por el mismo
-# recurso, y el certificado de certbot se pierde en cuanto alguien pasa por esa
-# pantalla o por el wizard de activacion.
-#
-# Por eso aqui se usa el script oficial y se apunta Apache directamente a
-# /etc/letsencrypt/live/, sin copias intermedias que se desincronicen: el
-# deploy hook de la renovacion solo tiene que recargar httpd.
-#
-# Estas tareas corren DESPUES de certbot, no desde tasks/main.yml.
-
 - name: Configure the Nagios XI SSL certificate
   when:
     - nagiosxi_ssl_cert | length > 0
@@ -30,8 +18,8 @@
     - name: Fail when the certificate or the key is missing
       ansible.builtin.fail:
         msg: >-
-          No se puede configurar SSL en {{ inventory_hostname }}:
-          faltan {{ __nagiosxi_ssl_files.results | rejectattr('stat.exists')
+          Cannot configure SSL on {{ inventory_hostname }}:
+          missing {{ __nagiosxi_ssl_files.results | rejectattr('stat.exists')
                     | map(attribute='__nagiosxi_ssl_file') | join(', ') }}.
       when: __nagiosxi_ssl_files.results | rejectattr('stat.exists') | list | length > 0
 
@@ -51,6 +39,4 @@
         cmd: "{{ nagiosxi_ssl_script }} --cert {{ nagiosxi_ssl_cert }} --key {{ nagiosxi_ssl_key }}"
       register: __nagiosxi_ssl_apply
       changed_when: __nagiosxi_ssl_apply.rc == 0
-      # el script hace manage_services.sh restart httpd al final, no hace
-      # falta notificar un reload extra
       when: __nagiosxi_ssl_current.stdout_lines != [nagiosxi_ssl_cert, nagiosxi_ssl_key]

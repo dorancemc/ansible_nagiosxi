@@ -7,14 +7,13 @@ nagiosxi_reboot_after_update: true
 nagiosxi_reboot_timeout: 600
 nagiosxi_ssh_services:
   RedHat: sshd
-# Apache points straight at /etc/letsencrypt/live/ through the official Nagios XI
-# script (tasks/ssl.yml): no copies under /usr/local/nagiosxi that drift out of
-# sync, and no lineinfile over an ssl.conf that XI rewrites on its own. That is why
-# no deploy files or copy hooks are needed here; the renewal deploy hook reloads
-# httpd and that is enough.
+# Certificate Apache should serve. Empty disables the SSL step entirely.
 nagiosxi_ssl_cert: ""
+# ssl.conf file read to decide whether the certificate change is already applied.
 nagiosxi_ssl_conf: /etc/httpd/conf.d/ssl.conf
+# Private key paired with nagiosxi_ssl_cert.
 nagiosxi_ssl_key: ""
+# Official Nagios XI SSL manager that owns ssl.conf.
 nagiosxi_ssl_script: /usr/local/nagiosxi/scripts/manage_ssl_config.sh
 nagiosxi_src_url: https://assets.nagios.com/downloads/nagiosxi/2026/xi-2026R1.7.tar.gz
 nagiosxi_staging_dir: /tmp/nagiosxi-install

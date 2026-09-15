@@ -91,10 +91,6 @@
       changed_when: __nagiosxi_reconfigure.rc == 0
       failed_when: __nagiosxi_reconfigure.rc != 0
 
-    # El wizard de activacion corre en el navegador y XI construye sus
-    # redirects absolutos desde esta opcion: sin corregirla, fullinstall -n
-    # deja http://localhost/nagiosxi/ y el wizard es inusable desde fuera.
-    # Tiene que quedar lista antes de que el role corte el play.
     - name: Set the nagios xi program url
       become: true
       ansible.builtin.script:

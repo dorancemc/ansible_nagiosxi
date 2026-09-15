@@ -1,20 +1,11 @@
 ---
-# El wizard de activación de Nagios XI corre en el navegador, no en el
-# instalador: pide la licencia y crea la cuenta de administrador, y al
-# terminar reescribe ssl.conf apuntando al certificado autofirmado del
-# producto. Todo certificado desplegado antes de ese momento se pierde.
-#
-# Por eso el role corta el play justo después de instalar y obliga a una
-# segunda ejecución: en esa segunda pasada verifica que el wizard quedó
-# completo y solo entonces deja seguir a certbot y al resto del despliegue.
-
 - name: Report that the setup wizard is pending
   ansible.builtin.debug:
     msg:
-      - "Nagios XI no estaba instalado en {{ inventory_hostname }} y se acaba de instalar."
-      - "Completa el wizard de activacion en {{ nagiosxi_url }} (licencia y cuenta de administrador)."
-      - "Cuando termine, vuelve a ejecutar el job con los mismos tags: el role verificara la"
-      - "instalacion y continuara con certbot y la configuracion de Nagios."
+      - "Nagios XI was not installed on {{ inventory_hostname }} and has just been installed."
+      - "Complete the activation wizard at {{ nagiosxi_url }} (license and administrator account)."
+      - "When done, re-run the job with the same tags: the role will verify the"
+      - "installation and continue with certbot and the Nagios configuration."
   when: __nagiosxi_installed_now | default(false)
 
 - name: End the play for this host until the setup wizard is completed
@@ -48,8 +39,8 @@
     - name: Fail when the setup wizard has not been completed yet
       ansible.builtin.fail:
         msg:
-          - "El wizard de activacion de Nagios XI sigue pendiente en {{ inventory_hostname }}."
+          - "The Nagios XI activation wizard is still pending on {{ inventory_hostname }}."
           - "{{ __nagiosxi_wizard_check.stdout | trim }}"
-          - "Completalo en {{ nagiosxi_url }} y vuelve a ejecutar el job."
-          - "Seguir ahora dejaria el certificado de Let's Encrypt sobrescrito por el autofirmado."
+          - "Complete it at {{ nagiosxi_url }} and re-run the job."
+          - "Continuing now would leave the Let's Encrypt certificate overwritten by the self-signed one."
       when: __nagiosxi_wizard_check.rc == 3
